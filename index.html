@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flood Risk AI</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    :root{
+      --bg:#edf2f7;
+      --panel:#ffffff;
+      --ink:#1f2937;
+      --muted:#64748b;
+      --line:#dbe3ef;
+      --shadow:0 10px 28px rgba(15, 23, 42, .12);
+      --blue:#2f7cf6;
+      --blue2:#1c5fd8;
+      --green:#32b36b;
+      --amber:#f5a524;
+      --red:#e4554d;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      font-family: Arial, sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+      overflow:hidden;
+    }
+
+    .topbar{
+      height:68px;
+      background:linear-gradient(180deg,#202938 0%, #273246 100%);
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 18px 0 20px;
+      box-shadow:0 2px 16px rgba(0,0,0,.2);
+      position:relative;
+      z-index:20;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-weight:800;
+      font-size:24px;
+    }
+    .drop{
+      width:30px;height:30px;border-radius:10px;
+      background:linear-gradient(180deg,#7ad7ff,#2877ff);
+      position:relative;
+    }
+    .drop:before{
+      content:"";
+      position:absolute;inset:5px 7px 6px 7px;
+      background:rgba(255,255,255,.55);
+      clip-path:polygon(50% 0%, 83% 23%, 98% 53%, 86% 83%, 50% 100%, 14% 83%, 2% 53%, 17% 23%);
+    }
+    .top-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .btn{
+      border:0;border-radius:12px;padding:11px 15px;font-weight:800;cursor:pointer;
+      box-shadow:0 1px 0 rgba(255,255,255,.12) inset;
+    }
+    .btn.primary{background:linear-gradient(180deg,#3f8eff,#2360d6); color:#fff}
+    .btn.ghost{background:#dfe7f8; color:#243247}
+    .btn.small{padding:10px 13px; border-radius:10px; font-size:14px}
+
+    .topbar .btn.ghost.small, .topbar .btn.primary.small{
+      background:#dfe7f8;
+      color:#243247;
+      border-radius:12px;
+      padding:11px 15px;
+      font-weight:800;
+      border:0;
+    }
+    .topbar .btn.primary.small{
+      background:linear-gradient(180deg,#3f8eff,#2360d6);
+      color:#fff;
+    }
+
+    .layout{
+      height:calc(100vh - 68px);
+      display:grid;
+      grid-template-columns:320px minmax(0,1fr) 330px;
+      min-height:0;
+    }
+
+    .sidebar{
+      background:linear-gradient(180deg,#eef3fb 0%, #e6edf8 100%);
+      border-right:1px solid #d5deec;
+      overflow:auto;
+      padding:16px 12px 14px;
+    }
+    .sidebar.right{
+      border-right:none;
+      border-left:1px solid #d5deec;
+    }
+
+    .intro{
+      font-size:18px;
+      line-height:1.25;
+      font-weight:800;
+      margin:4px 4px 14px;
+      color:#203046;
+    }
+    .subtle{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+      margin:0 4px 12px;
+    }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:18px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      margin-bottom:14px;
+    }
+    .card-header{
+      padding:13px 15px;
+      font-weight:900;
+      font-size:17px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#fbfcfe 0%, #f3f6fb 100%);
+    }
+    .card-body{padding:13px 14px 14px}
+
+    .var-group{
+      margin-bottom:12px;
+      padding-bottom:10px;
+      border-bottom:1px solid #eef2f7;
+    }
+    .var-group:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+    .var-top{
+      display:flex;justify-content:space-between;gap:10px;align-items:center;
+      margin-bottom:6px;
+    }
+    .var-name{font-weight:800;font-size:15px;color:#23324a}
+    .var-value{font-weight:900;font-size:17px;color:#203046}
+    .var-note{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted);margin-top:5px}
+    .slider{width:100%;accent-color:#4f8ef7;margin:0}
+    .tag{
+      display:inline-block;font-size:11px;font-weight:800;color:#fff;padding:4px 8px;border-radius:999px;margin-left:8px;vertical-align:middle
+    }
+    .tag.inv{background:#6b7c93}
+    .tag.w{background:#11a56d}
+
+    .result-wrap{text-align:center}
+    .gauge{
+      width:100%;
+      height:160px;
+      border-radius:160px 160px 16px 16px;
+      background:conic-gradient(#45c16b 0 30%, #f5c542 30% 60%, #e74c3c 60% 100%);
+      position:relative;
+      margin:6px 0 10px;
+      border:1px solid rgba(0,0,0,.05);
+      overflow:hidden;
+    }
+    .gauge:after{
+      content:"";
+      position:absolute;inset:18px 18px 0 18px;top:18px;
+      background:#fff;border-radius:inherit;
+    }
+    .gauge-center{
+      position:absolute;inset:0;z-index:2;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      pointer-events:none;
+    }
+    .score{font-size:40px;font-weight:1000;line-height:1;color:#23324a}
+    .risk{margin-top:4px;font-size:18px;font-weight:900}
+    .risk.low{color:#3aa44d}.risk.medium{color:#d38c08}.risk.high{color:#c5392d}
+    .riskbar{height:10px;background:#e7edf5;border-radius:999px;overflow:hidden;margin:10px 0 8px}
+    .riskbar > div{height:100%;border-radius:inherit;background:linear-gradient(90deg,#45c16b 0%, #f5c542 50%, #e74c3c 100%)}
+    .tiny{
+      display:flex;justify-content:space-between;align-items:center;
+      border-bottom:1px dashed #e6ecf4;padding:6px 0;font-size:13px;color:#405065
+    }
+    .tiny:last-child{border-bottom:none}
+
+    .analysis-row{display:flex; gap:10px; flex-wrap:wrap}
+    .analysis-btn{
+      flex:1;min-width:134px;border:0;color:#fff;font-weight:900;padding:12px 14px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow)
+    }
+    .orange{background:linear-gradient(180deg,#ffbf4d,#f08b21)}
+    .blue{background:linear-gradient(180deg,#4d91ff,#215fd2)}
+    .green{background:linear-gradient(180deg,#35bf7f,#1c9b60)}
+    .analysis-note{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.45}
+
+    .map-wrap{position:relative;min-width:0;background:#cfe1f3}
+    #map{height:100%;width:100%}
+
+    .tabs{
+      position:absolute;top:10px;left:50%;transform:translateX(-50%);
+      display:flex;gap:10px;z-index:900;flex-wrap:wrap;justify-content:center;
+      pointer-events:none;
+    }
+    .tab{
+      pointer-events:auto;
+      background:rgba(255,255,255,.82);
+      border:1px solid rgba(0,0,0,.06);
+      border-radius:8px;
+      padding:12px 18px;
+      font-weight:800;
+      color:#39475f;
+      box-shadow:var(--shadow);
+      cursor:pointer;
+      user-select:none;
+    }
+    .tab.active{background:#dfe6f8}
+
+    .legend{
+      position:absolute;right:16px;bottom:16px;
+      background:rgba(255,255,255,.85);backdrop-filter:blur(8px);
+      border:1px solid rgba(0,0,0,.06);border-radius:14px;
+      padding:11px 12px;box-shadow:var(--shadow);z-index:800;min-width:170px;font-size:14px
+    }
+    .legend-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+    .legend-swatch{width:22px;height:14px;border-radius:4px}
+    .note{
+      position:absolute;left:16px;bottom:16px;width:230px;
+      background:rgba(255,255,255,.85);backdrop-filter:blur(8px);
+      border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:10px 12px;
+      box-shadow:var(--shadow);z-index:800;color:#334155;font-size:13px;line-height:1.4
+    }
+
+    .history-list{list-style:none;padding:0;margin:0}
+    .history-item{
+      display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+      padding:10px 0;border-bottom:1px solid #edf1f7;font-size:14px
+    }
+    .history-item:last-child{border-bottom:none}
+    .dot{width:12px;height:12px;border-radius:50%}
+    .dot.red{background:var(--red)} .dot.orange{background:var(--amber)} .dot.green{background:var(--green)}
+
+    .chart-holder{height:230px}
+
+    .modal{
+      position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,14,26,.45);z-index:5000;padding:18px
+    }
+    .modal.show{display:flex}
+    .modal-box{
+      width:min(420px,96vw);background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.25);border:1px solid #e5e9f2;overflow:hidden
+    }
+    .modal-head{
+      padding:14px 16px;background:linear-gradient(180deg,#f9fbff,#eef3ff);font-weight:1000;font-size:18px;color:#243247;border-bottom:1px solid #e5e9f2
+    }
+    .modal-body{padding:14px 16px;color:#273247;white-space:pre-line;line-height:1.5;font-size:14px}
+    .modal-foot{padding:0 16px 16px}
+    .close-btn{border:0;background:linear-gradient(180deg,#3c8cff,#1d5fd6);color:#fff;border-radius:12px;padding:10px 16px;font-weight:900;cursor:pointer}
+
+    .loading{display:none;align-items:center;gap:10px;font-size:13px;color:#55657e;margin-top:10px}
+    .loading.show{display:flex}
+    .spinner{width:16px;height:16px;border-radius:50%;border:3px solid #dbe3ef;border-top-color:#2f7cf6;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+
+    /* Selected location card styling */
+    #selectedBox{
+      padding: 10px 16px 12px;
+    }
+    #selectedBox .kv{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      padding:7px 0;
+      border-bottom:1px dashed #e6ecf4;
+      font-size:13px;
+      line-height:1.25;
+    }
+    #selectedBox .kv:last-child{
+      border-bottom:none;
+      padding-bottom:2px;
+    }
+    #selectedBox .kv span:first-child{
+      color:#32435c;
+      flex:1 1 auto;
+      padding-right:10px;
+    }
+    #selectedBox .kv span:last-child{
+      font-weight:800;
+      color:#243247;
+      text-align:right;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    #selectedCard{
+      border-radius:20px;
+    }
+    #selectedCard .card-header{
+      font-size:18px;
+    }
+
+    /* Tutorial modal polishing */
+    #tutorialModal .modal-box{
+      max-width: 460px;
+    }
+    #tutorialText{
+      min-height: 130px;
+      white-space: pre-line;
+      font-size: 15px;
+    }
+    #tutorialOk, #tutorialNext{
+      min-width: 92px;
+    }
+
+    @media (max-width: 1180px){
+      body{overflow:auto}
+      .layout{grid-template-columns:1fr;height:auto}
+      .sidebar{border-right:none;border-left:none;border-bottom:1px solid #d5deec}
+      .sidebar.right{border-left:none;border-top:1px solid #d5deec}
+      .map-wrap{height:72vh}
+      .note{display:none}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="drop"></span> Flood Risk AI</div>
+    <div class="top-actions">
+      <button class="btn ghost small" id="btnTutorial">How to use</button>
+      <button class="btn ghost small" id="btnSimRain">Simulate +20% Rainfall</button>
+      <button class="btn ghost small" id="btnCompare">Compare Locations</button>
+      <button class="btn primary small" id="btnReport">Download Report (PDF)</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="intro">Click the map to analyze flood risk.</div>
+      <div class="subtle">All inputs are scaled 0–100. Elevation, vegetation, and river distance are inverted in the FRI formula.</div>
+
+      <div class="card">
+        <div class="card-header">Input Data</div>
+        <div class="card-body">
+          <div class="var-group">
+            <div class="var-top"><div class="var-name">Rainfall <span class="tag w">Wt. 0.30</span></div><div class="var-value" id="rainVal">0.80</div></div>
+            <input id="rain" class="slider" type="range" min="0" max="100" value="80">
+            <div class="var-note"><span>Normalized: <span id="rainNorm">80</span> mm</span><span>Direct</span></div>
+          </div>
+
+          <div class="var-group">
+            <div class="var-top"><div class="var-name">Elevation <span class="tag inv">Inverted</span> <span class="tag w">Wt. 0.25</span></div><div class="var-value" id="elevVal">0.80</div></div>
+            <input id="elev" class="slider" type="range" min="0" max="100" value="80">
+            <div class="var-note"><span>Normalized: <span id="elevNorm">80</span> m</span><span>Low = higher risk</span></div>
+          </div>
+
+          <div class="var-group">
+            <div class="var-top"><div class="var-name">Building Density <span class="tag w">Wt. 0.20</span></div><div class="var-value" id="densityVal">0.85</div></div>
+            <input id="density" class="slider" type="range" min="0" max="100" value="85">
+            <div class="var-note"><span>Normalized: <span id="densityNorm">85</span> %</span><span>Direct</span></div>
+          </div>
+
+          <div class="var-group">
+            <div class="var-top"><div class="var-name">Vegetation <span class="tag inv">Inverted</span> <span class="tag w">Wt. 0.15</span></div><div class="var-value" id="vegVal">0.15</div></div>
+            <input id="veg" class="slider" type="range" min="0" max="100" value="15">
+            <div class="var-note"><span>Normalized: <span id="vegNorm">15</span> %</span><span>Low = higher risk</span></div>
+          </div>
+
+          <div class="var-group">
+            <div class="var-top"><div class="var-name">Distance to River <span class="tag inv">Inverted</span> <span class="tag w">Wt. 0.10</span></div><div class="var-value" id="riverVal">0.35</div></div>
+            <input id="river" class="slider" type="range" min="0" max="100" value="35">
+            <div class="var-note"><span>Normalized: <span id="riverNorm">35</span> m</span><span>Far = lower risk</span></div>
+          </div>
+
+          <div class="var-group">
+            <div class="var-top"><div class="var-name">Drainage <span class="tag w">Used in scenario</span></div><div class="var-value" id="drainVal">0.55</div></div>
+            <input id="drain" class="slider" type="range" min="0" max="100" value="55">
+            <div class="var-note"><span>Normalized: <span id="drainNorm">55</span> %</span><span>Scenario-ready</span></div>
+          </div>
+
+          <div style="display:grid;gap:10px;margin-top:16px;">
+            <button class="btn primary" id="btnManualPredict" style="width:100%;padding:14px 16px;border-radius:16px;font-size:16px;">Predict from Manual Input</button>
+            <button class="btn ghost" id="btnResetInputs" style="width:100%;padding:13px 16px;border-radius:16px;font-size:15px;">Reset Inputs</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Flood Risk Result</div>
+        <div class="card-body result-wrap">
+          <div class="gauge">
+            <div class="gauge-center">
+              <div class="score" id="scoreGauge">0.77</div>
+              <div class="risk high" id="riskLabel">Flood Risk: High</div>
+            </div>
+          </div>
+          <div class="riskbar"><div id="riskBar" style="width:77%"></div></div>
+          <div class="tiny"><span>Risk Percentage</span><strong id="riskPct">77.00%</strong></div>
+          <div class="tiny"><span>Confidence</span><strong id="confidenceVal">82.00%</strong></div>
+          <div class="tiny"><span>Timestamp</span><strong id="timestampVal">—</strong></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Advanced Analysis</div>
+        <div class="card-body">
+          <div class="analysis-row">
+            <button class="analysis-btn orange" id="btnSimRain2">Simulate +20% Rainfall</button>
+            <button class="analysis-btn blue" id="btnUrban">Urban Expansion</button>
+            <button class="analysis-btn green" id="btnDrainage">Increase Drainage</button>
+          </div>
+          <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Calculating scenario...</div>
+          </div>
+          <div class="analysis-note">
+            Try scenarios to see how the FRI changes. Compare mode stores two locations and shows a direct result.
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="map-wrap">
+      <div class="tabs">
+        <div class="tab active" data-tab="compare">Location Comparison</div>
+        <div class="tab" data-tab="scenario">Scenario Analysis</div>
+        <div class="tab" data-tab="history">History</div>
+      </div>
+      <div id="map"></div>
+      <div class="note">
+        Click 2 locations to compare them.<br>
+        The panel on the left shows the active variables and the final FRI.
+      </div>
+      <div class="legend">
+        <div style="font-weight:900;margin-bottom:4px">Legend</div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#9acd32"></span> Low (0–0.3)</div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#f5a524"></span> Medium (0.3–0.6)</div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#e4554d"></span> High (0.6–1)</div>
+      </div>
+    </section>
+
+    <aside class="sidebar right">
+      <div class="card" id="selectedCard">
+        <div class="card-header" id="selectedHeader">Selected Location</div>
+        <div class="card-body" id="selectedBox">
+          <div class="kv"><span>Location</span><span id="locName">—</span></div>
+          <div class="kv"><span>Score</span><span id="locScore">—</span></div>
+          <div class="kv"><span>Confidence</span><span id="locConf">—</span></div>
+          <div class="kv"><span>Elevation</span><span id="locElev">—</span></div>
+          <div class="kv"><span>Rainfall</span><span id="locRain">—</span></div>
+          <div class="kv"><span>Building Density</span><span id="locBuild">—</span></div>
+          <div class="kv"><span>Vegetation</span><span id="locVeg">—</span></div>
+          <div class="kv"><span>Distance to River</span><span id="locRiver">—</span></div>
+          <div class="kv"><span>Risk Category</span><span id="locRisk">—</span></div>
+        </div>
+      </div>
+
+      <div class="card" id="vizCard">
+        <div class="card-header">Visualization Tools</div>
+        <div class="card-body">
+          <div class="chart-holder"><canvas id="chart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card" id="historyCard">
+        <div class="card-header" id="historyHeader">History</div>
+        <div class="card-body">
+          <ul class="history-list" id="historyList"></ul>
+        </div>
+      </div>
+
+      <div class="card" id="scenarioCard">
+        <div class="card-header" id="scenarioHeader">Scenario Analysis</div>
+        <div class="card-body">
+          <div class="subtle" style="margin:0">
+            Scenario controls are active via the buttons on the left. Clicking this card will focus the scenario panel.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">About Model</div>
+        <div class="card-body">
+          <div class="subtle" style="margin:0">
+            FRI = weighted combination of rainfall, inverse elevation, building density,
+            inverse vegetation, and inverse river distance. Designed for explainable flood-risk screening.
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-box">
+      <div class="modal-head" id="modalHead">Result</div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot"><button class="close-btn" id="modalClose">OK</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="tutorialModal">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-head">Tutorial Singkat</div>
+      <div class="modal-body" id="tutorialText"></div>
+      <div class="modal-foot" style="display:flex;gap:10px;justify-content:flex-start">
+        <button class="close-btn" id="tutorialOk">OK</button>
+        <button class="btn ghost small" id="tutorialNext" style="padding:10px 18px;border-radius:12px;font-weight:900;">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
